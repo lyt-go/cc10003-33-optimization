@@ -28,6 +28,28 @@ class EntryPayload(BaseModel):
     remark: str | None = None
 
 
+class ExecutionPayload(BaseModel):
+    """提交一次预测执行单元：identity 四要素 + 参数区 + 台账信息。"""
+
+    run_id: str | None = None  # 幂等键：重复提交返回原结果；失败时用同一 run_id 续跑
+    task_id: str | None = None  # 并行任务标识：共享 artifact，各自保留输入快照
+    target_key: str
+    predicted_target: str | None = None
+    feature_snapshot: dict[str, Any]
+    train_span: dict[str, str]
+    forecast_span: dict[str, str]
+    parameters: dict[str, Any] | None = None  # 参数区：变化只触发 parameter_replay
+    input_snapshot: dict[str, Any] | None = None
+    fail_at_slices: list[Any] | None = None  # 故障演练：指定失败切片（日期或序号）
+
+
+class ReadingPayload(BaseModel):
+    """分析方案读取预测产物。"""
+
+    分析方案编号: str
+    预测方案编号: str
+
+
 
 class MetricEntry(BaseModel):
     """指标定义明细结构。"""

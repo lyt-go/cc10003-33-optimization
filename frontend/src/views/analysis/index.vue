@@ -47,6 +47,14 @@
             >
               {{ action }}
             </button>
+            <button
+              v-if="row['关联预测方案']"
+              class="link"
+              type="button"
+              @click="pullForecast(row)"
+            >
+              读取预测产物
+            </button>
           </td>
         </tr>
         <tr v-if="!rows.length">
@@ -55,8 +63,48 @@
       </tbody>
     </table>
 
+    <section class="exec-panel">
+      <h3>预测读取记录（训练产物 → 分析输出）</h3>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>reading_id</th>
+            <th>预测方案</th>
+            <th>模型版本</th>
+            <th>参数复评版本</th>
+            <th>训练区间</th>
+            <th>预测区间</th>
+            <th>置信水平</th>
+            <th>预测中值合计</th>
+            <th>重算范围</th>
+            <th>一致性</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="item in readings" :key="item.reading_id">
+            <td>{{ item.reading_id }}</td>
+            <td>{{ item['预测方案编号'] }}</td>
+            <td>{{ item.model_version }}</td>
+            <td>{{ item.eval_version ?? '—' }}</td>
+            <td>{{ spanText(item.train_span) }}</td>
+            <td>{{ spanText(item.forecast_span) }}</td>
+            <td>{{ item.confidence_level ?? '—' }}</td>
+            <td>{{ item.predicted_target }}: {{ item.median_total }}</td>
+            <td>{{ scopeText(item.recompute_scope) }}</td>
+            <td :title="(item.consistency?.issues ?? []).join('；')">
+              {{ item.consistency?.consistent ? '一致' : '不一致' }}
+            </td>
+          </tr>
+          <tr v-if="!readings.length">
+            <td colspan="10" class="empty-state">暂无读取记录，点击「读取预测产物」消费训练结果</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
     <footer class="page-foot">
       <span>共 {{ total }} 条分析方案记录</span>
+      <span v-if="noticeMessage" class="notice-text">{{ noticeMessage }}</span>
       <span v-if="errorMessage" class="error-text">{{ errorMessage }}</span>
     </footer>
   </section>
@@ -68,6 +116,7 @@ import { onMounted, ref } from 'vue'
 import { request } from '@/api/client'
 
 type Row = Record<string, string | number | null>
+type ReadingRow = Record<string, any>
 
 const ENDPOINT = '/api/analysis'
 const columns = ["方案编号", "分析主题", "数据集范围", "分析方法", "对比基准", "显著性阈值", "输出图表类型", "调度周期"]
@@ -78,8 +127,53 @@ const stats = [{"label": "分析方案总数", "value": 0}, {"label": "已启用
 const rows = ref<Row[]>([])
 const total = ref(0)
 const errorMessage = ref('')
+const noticeMessage = ref('')
 const filters = ref<Record<string, string>>({})
 const filterFields = columns.slice(0, 3)
+
+const readings = ref<ReadingRow[]>([])
+
+function spanText(span?: { start?: string; end?: string } | null) {
+  return span?.start ? `${span.start} ~ ${span.end}` : '—'
+}
+
+function scopeText(scope?: { from?: string; to?: string } | null) {
+  return scope?.from ? `${scope.from} ~ ${scope.to}` : '未重算'
+}
+
+async function pullForecast(row: Row) {
+  errorMessage.value = ''
+  noticeMessage.value = ''
+  try {
+    const response = await request('/api/analysis/readings', {
+      method: 'POST',
+      body: JSON.stringify({
+        分析方案编号: row['方案编号'],
+        预测方案编号: row['关联预测方案'],
+      }),
+    })
+    const payload = await response.json()
+    if (!payload.ok) {
+      throw new Error(payload.message || '读取预测产物未生效')
+    }
+    noticeMessage.value = payload.message
+    await reloadReadings()
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : '读取预测产物失败'
+  }
+}
+
+async function reloadReadings() {
+  try {
+    const response = await request('/api/analysis/readings')
+    if (response.ok) {
+      const payload = await response.json()
+      readings.value = payload.items ?? []
+    }
+  } catch {
+    // 面板数据加载失败不阻塞主列表
+  }
+}
 
 function resetFilters() {
   filters.value = {}
@@ -126,5 +220,8 @@ async function reload() {
   }
 }
 
-onMounted(reload)
+onMounted(() => {
+  void reload()
+  void reloadReadings()
+})
 </script>

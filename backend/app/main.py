@@ -9,10 +9,15 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
+from app.ledger_store import ledger
 from app.routers import ROUTERS
+from app.services.forecast_exec import reconcile_forecast_entries
 from app.store import store
 
 app = FastAPI(title="指标口径与分析实验平台", version="1.0.0")
+
+# 启动即按持久化台账回写方案行的模型版本/置信水平：重启后刷新、重进口径一致。
+reconcile_forecast_entries(store, ledger)
 
 app.add_middleware(
     CORSMiddleware,

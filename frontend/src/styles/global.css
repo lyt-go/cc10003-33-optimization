@@ -33,3 +33,7 @@ body { margin: 0; background: #f6f8fb; color: #1f2937; }
 .link { border: none; background: none; color: var(--brand); cursor: pointer; padding: 0; }
 .page-foot { display: flex; justify-content: space-between; margin-top: 8px; font-size: 12px; color: var(--muted); }
 .error-text { color: #b42318; }
+.notice-text { color: #027a48; }
+.exec-panel { margin-top: 16px; }
+.exec-panel h3 { font-size: 14px; margin: 16px 0 8px; }
+.exec-panel .data-table { margin-bottom: 8px; }

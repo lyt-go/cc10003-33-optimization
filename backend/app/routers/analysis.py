@@ -1,19 +1,48 @@
-"""分析方案接口：维护分析方案，覆盖提交方案评审、启用方案、归档方案等动作。"""
+"""分析方案接口：维护分析方案，覆盖提交方案评审、启用方案、归档方案等动作。
+
+分析读取接口（/readings）登记在 /{entry_id} 之前，避免被单条明细路由抢占。
+读取记录把训练产物、参数复评版本与分析输出绑定，三方互相定位。
+"""
 from __future__ import annotations
 
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
 
-from app.schemas import ActionResult, EntryPayload, PageResult
+from app.ledger_store import ledger
+from app.schemas import ActionResult, EntryPayload, PageResult, ReadingPayload
 from app.services.analysis import AnalysisService
+from app.services.analysis_reading import AnalysisReadingService
+from app.store import store
 
 router = APIRouter(prefix="/api/analysis", tags=["分析方案"])
 
 service = AnalysisService()
+reading_service = AnalysisReadingService(ledger_store=ledger, module_store=store)
 
 LIST_FIELDS = ["方案编号", "分析主题", "数据集范围", "分析方法", "对比基准", "显著性阈值", "输出图表类型", "调度周期"]
 STATUSES = ["草稿", "方案评审中", "已启用", "已归档"]
+
+
+@router.post("/readings", response_model=ActionResult)
+def create_reading(payload: ReadingPayload) -> ActionResult:
+    """分析方案读取预测产物：快照模型版本、窗口、置信水平与预测中值。"""
+    reading, message = reading_service.create_reading(payload.分析方案编号, payload.预测方案编号)
+    if reading is None:
+        return ActionResult(ok=False, message=message)
+    return ActionResult(ok=True, message=message, entry=reading)
+
+
+@router.get("/readings", response_model=PageResult[dict])
+def list_readings(
+    分析方案编号: str | None = Query(default=None, description="按分析方案编号过滤读取记录"),
+    page: int = 1,
+    size: int = 50,
+) -> PageResult[dict]:
+    """读取记录列表：每条都实时与训练产物对账，刷新/重进后口径一致。"""
+    readings = reading_service.list_readings(analysis_code=分析方案编号)
+    start = max(page - 1, 0) * size
+    return PageResult(items=readings[start:start + size], total=len(readings), page=page, size=size)
 
 
 @router.get("", response_model=PageResult[dict])
